@@ -5,16 +5,22 @@ Created on Thu Jul 11 17:35:40 2024
 @author: Jack Li
 """
 
-from client import MMTLSClient, MMTLSClientShort, Session
+import os
+import sys
 import zlib
+
+local_path = os.path.split(os.path.abspath(__file__))[0]
+sys.path.append(os.path.join(local_path, ".."))
+
+from client import MMTLSClient, MMTLSClientShort, Session
 
 
 def test_mmtls_long():
     client = MMTLSClient()
-    session = Session.load_session("session")
+    session = Session.load_session(os.path.join(local_path, "session"))
     client.session = session
     err = client.hand_shake("szlong.weixin.qq.com")
-    client.session.save("session")
+    client.session.save(os.path.join(local_path, "session"))
     if err >= 0:
         client.noop()
     client.close()
@@ -22,7 +28,7 @@ def test_mmtls_long():
 
 def test_mmtls_short():
     client = MMTLSClientShort()
-    session = Session.load_session("session")
+    session = Session.load_session(os.path.join(local_path, "session"))
     assert session is not None
     client.session = session
     result = client.request("dns.weixin.qq.com.cn", "/cgi-bin/micromsg-bin/newgetdns", b"")

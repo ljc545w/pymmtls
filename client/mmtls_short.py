@@ -5,9 +5,9 @@ Created on Fri Jun 21 16:40:09 2024
 @author: Jack Li
 """
 
-import socket
 import hashlib
 import hmac
+import requests
 from .hand_shake_hasher import HandShakeHasher
 from .session import Session, TrafficKeyPair
 from .record import MMTLSRecord
@@ -17,36 +17,42 @@ from .utility import hkdf_expand, get_random_key, get_logger, get_host_by_name
 
 class MMTLSClientShort:
     def __init__(self):
-        self.conn: 'socket.socket' or None = None
         self.status: int = 0
         self.packet_reader: bytes or None = None
         self.hand_shake_hasher: 'HandShakeHasher' or None = None
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
         self.session: 'Session' or None = None
-        self.resp_header: bytes or None = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
     def request(self,
                 host: str,
                 path: str,
-                data: bytes,
-                port: int = 80) -> bytes:
+                data: bytes) -> bytes:
         self.logger.info("Short link request begin!!!!")
         result = bytearray()
         try:
             ip = get_host_by_name(host)
-            self.conn = socket.socket(socket.AF_INET,
-                                      socket.SOCK_STREAM,
-                                      socket.IPPROTO_TCP)
-            self.conn.connect((ip, port))
             assert self.session is not None
             http_packet = self.pack_http(ip, path, data)
-            s_len = self.conn.send(http_packet)
-            assert s_len > 0
-            resp_data = self.parse_response()
-            self.packet_reader = resp_data
+            headers = {
+                "Host": host,
+                "Accept": "*/*",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Content-Length": str(len(http_packet)),
+                "Content-Type": "application/octet-stream",
+                "Upgrade": "mmtls",
+                "User-Agent": "MicroMessenger Client",
+                "X-Online-Host": host
+            }
+            random_arr = get_random_key(2)
+            random_name = (random_arr[0] << 8) | (random_arr[1] << 1)
+            url = "http://%s/mmtls/%08x" % (host, random_name)
+            resp = requests.post(url, data=http_packet, headers=headers)
+            assert resp.status_code == 200
+            self.packet_reader = resp.content
             rc = self.read_server_hello()
             assert rc >= 0
             traffic_key = self.compute_traffic_key(
@@ -69,9 +75,6 @@ class MMTLSClientShort:
         return bytes(result)
 
     def close(self) -> int:
-        if self.conn is not None:
-            self.conn.close()
-            self.conn = None
         self.status = 0
         return 0
 
@@ -114,8 +117,7 @@ class MMTLSClientShort:
         record_data = abort_record.serialize()
         tls_payload.extend(record_data)
         self.client_seq_num += 1
-        header = self.build_request_header(host, len(tls_payload))
-        result = header + tls_payload
+        result = tls_payload
         self.logger.info(result.hex().upper())
         return result
 
@@ -135,33 +137,6 @@ class MMTLSClientShort:
         length = len(result) - 4
         result[:4] = length.to_bytes(4, 'big')
         return result
-
-    @staticmethod
-    def build_request_header(host: str,
-                             length: int
-                             ) -> bytes:
-        random_arr = get_random_key(2)
-        random_name = (random_arr[0] << 8) | (random_arr[1] << 1)
-        header_format = ("POST /mmtls/%08x HTTP/1.1\r\nHost: %s\r\nAccept: */*\r\nCache-Control: "
-                         "no-cache\r\nConnection: Keep-Alive\r\nContent-Length: %d\r\nContent-Type: "
-                         "application/octet-stream\r\nUpgrade: mmtls\r\nUser-Agent: MicroMessenger "
-                         "Client\r\nX-Online-Host: %s\r\n\r\n")
-        header = header_format % (random_name, host, length, host)
-        return header.encode()
-
-    def parse_response(self) -> bytes:
-        result = bytearray()
-        while True:
-            block = self.conn.recv(1024)
-            result.extend(block)
-            if len(block) == 0:
-                break
-        pos = result.find(b"\r\n\r\n")
-        assert pos > 0
-        self.resp_header = bytes(result[0: pos + 4])
-        result = result[pos + 4:]
-        self.logger.info(result.hex().upper())
-        return bytes(result)
 
     def read_server_hello(self) -> int:
         server_hello_record = MMTLSRecord.read_record(self.packet_reader)
