@@ -91,12 +91,12 @@ class MMTLSConnection:
                     print("unknown data type: %d" % data_record.data_type)
                     break
             except socket.error as e:
-                print(e)
+                self.logger.error(str(e))
                 break
             except AssertionError as e:
-                print(e)
+                self.logger.error(str(e))
                 break
-        self.logger("Client %d is shutdowning..." % self.client_id)
+        self.logger.info("Client %d is shutdowning..." % self.client_id)
         MMTLSServer().clients.pop(self.client_id)
         self.close()
 
