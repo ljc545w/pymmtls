@@ -28,6 +28,18 @@ class DataRecord:
         self.seq = seq
         self.data = data
 
+    @classmethod
+    def read_data_record(cls, data: bytes) -> 'DataRecord':
+        # length = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        data = data[2:]
+        data = data[2:]
+        data_type = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        seq = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        return cls(data_type, seq, data)
+        
     def serialize(self) -> bytes:
         result = bytearray()
         length = len(self.data) + 16
@@ -101,20 +113,20 @@ class MMTLSRecord:
         result.extend(self.data)
         return bytes(result)
     
-    def encrypt(self, keys: 'TrafficKeyPair', client_seq_num: int) -> int:
-        nonce = keys.client_nonce
+    def encrypt(self, keys: 'TrafficKeyPair', server_seq_num: int) -> int:
+        nonce = keys.server_nonce
         if len(nonce) == 0:
             return -1
-        nonce = xor_nonce(nonce, client_seq_num)
+        nonce = xor_nonce(nonce, server_seq_num)
         auddit = bytearray()
         auddit.extend([0] * 4)
-        auddit.extend(client_seq_num.to_bytes(4, "big"))
+        auddit.extend(server_seq_num.to_bytes(4, "big"))
         auddit.extend(self.record_type.to_bytes(1, "big"))
         auddit.extend(self.version.to_bytes(2, "big"))
         fill_len = self.length + 0x10
         auddit.extend(fill_len.to_bytes(2, "big"))
         cipher = Cipher(
-            algorithms.AES(keys.client_key), 
+            algorithms.AES(keys.server_key),
             modes.GCM(nonce), 
             backend=default_backend())
         encryptor = cipher.encryptor()
@@ -124,17 +136,17 @@ class MMTLSRecord:
         self.length = len(self.data)
         return 0
 
-    def decrypt(self, keys: 'TrafficKeyPair', server_seq_num: int) -> int:
-        nonce = keys.server_nonce
-        nonce = xor_nonce(nonce, server_seq_num)
+    def decrypt(self, keys: 'TrafficKeyPair', client_seq_num: int) -> int:
+        nonce = keys.client_nonce
+        nonce = xor_nonce(nonce, client_seq_num)
         auddit = bytearray()
         auddit.extend([0] * 4)
-        auddit.extend(server_seq_num.to_bytes(4, "big"))
+        auddit.extend(client_seq_num.to_bytes(4, "big"))
         auddit.extend(self.record_type.to_bytes(1, "big"))
         auddit.extend(self.version.to_bytes(2, "big"))
         auddit.extend(self.length.to_bytes(2, "big"))
         cipher = Cipher(
-            algorithms.AES(keys.server_key), 
+            algorithms.AES(keys.client_key),
             modes.GCM(nonce, self.data[-16:]), 
             backend=default_backend())
         decryptor = cipher.decryptor()

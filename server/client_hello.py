@@ -138,3 +138,80 @@ class ClientHello:
         total_len = len(result) - 4
         result[0:4] = total_len.to_bytes(4, 'big')
         return bytes(result)
+
+    @classmethod
+    def read_client_hello(cls, data: bytes) -> "ClientHello":
+        instance = cls()
+        # total_len = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        # skip 0x1
+        data = data[1:]
+        protocol_version = int.from_bytes(data[:2], "little")
+        data = data[2:]
+        cipher_suites = []
+        cipher_suites_len = data[0]
+        data = data[1:]
+        for i in range(cipher_suites_len):
+            cipher_suite = int.from_bytes(data[:2], "big")
+            data = data[2:]
+            cipher_suites.append(cipher_suite)
+        random = data[:32]
+        data = data[32:]
+        timestamp = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        # cipher_len = int.from_bytes(data[:4], "big")
+        data = data[4:]
+        cipher_suites_len = data[0]
+        data = data[1:]
+        extensions = {}
+        for si in range(cipher_suites_len, 0, -1):
+            cipher = cipher_suites[si - 1]
+            if cipher == TLS_PSK_WITH_AES_128_GCM_SHA256:
+                # psk_len = int.from_bytes(data[:4], "big")
+                data = data[4:]
+                # skip 0x0
+                data = data[1:]
+                # skip 0xf
+                data = data[1:]
+                # skip 0x1
+                data = data[1:]
+                key_len = int.from_bytes(data[:4], "big")
+                data = data[4:]
+                extension = data[:key_len]
+                data = data[key_len:]
+                extensions[cipher] = [extension]
+            elif cipher == (TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff):
+                # ecdsa_len = int.from_bytes(data[:4], "big")
+                data = data[4:]
+                # skip 0x0
+                data = data[1:]
+                # skip 0x10
+                data = data[1:]
+                extensions_count = data[0]
+                data = data[1:]
+                # key_flag = 5
+                extensions_list = []
+                for i in range(extensions_count):
+                    # key_len = int.from_bytes(data[:4], "big")
+                    data = data[4:]
+                    # key_flag = int.from_bytes(data[:4], "big")
+                    data = data[4:]
+                    extension_len = int.from_bytes(data[:2], "big")
+                    data = data[2:]
+                    extension = data[:extension_len]
+                    data = data[extension_len:]
+                    extensions_list.append(extension)
+                extensions[cipher] = extensions_list
+                magic = data
+                assert len(magic) == 13
+            else:
+                raise RuntimeError(f"cipher ({cipher}) not support")
+        instance.protocol_version = protocol_version
+        instance.cipher_suites = cipher_suites_len
+        instance.random = random
+        instance.timestamp = timestamp
+        instance.extensions = extensions
+        return instance
+
+    def get_client_public_key(self) -> bytes:
+        return self.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff][0]

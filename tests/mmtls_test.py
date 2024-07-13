@@ -17,18 +17,18 @@ from client import MMTLSClient, MMTLSClientShort, Session
 
 def test_mmtls_long():
     client = MMTLSClient()
-    session = Session.load_session(os.path.join(local_path, "session"))
+    session = Session.load_session(os.path.join(local_path, "mm.session"))
     client.session = session
     err = client.hand_shake("szlong.weixin.qq.com")
-    client.session.save(os.path.join(local_path, "session"))
     if err >= 0:
+        client.session.save(os.path.join(local_path, "mm.session"))
         client.noop()
     client.close()
 
 
 def test_mmtls_short():
     client = MMTLSClientShort()
-    session = Session.load_session(os.path.join(local_path, "session"))
+    session = Session.load_session(os.path.join(local_path, "mm.session"))
     assert session is not None
     client.session = session
     result = client.request("dns.weixin.qq.com.cn", "/cgi-bin/micromsg-bin/newgetdns", b"")

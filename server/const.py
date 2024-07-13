@@ -21,12 +21,12 @@ TCP_NoopResponse = 0x3B9ACA06
 
 TCP_Request = 0x00
 TCP_Response = 0x3B9ACA00
-Curve = ecdsa.NIST256p
 ServerEcdhCurveId = 415
-ServerVerifyEcdhX = "1da177b6a5ed34dabb3f2b047697ca8bbeb78c68389ced43317a298d77316d54"
-ServerVerifyEcdhY = "4175c032bc573d5ce4b3ac0b7f2b9a8d48ca4b990ce2fa3ce75cc9d12720fa35"
-ServerVerifyEcdh = ecdsa.VerifyingKey.from_string(
-    bytes.fromhex(POINT_CONVERSION_UNCOMPRESSED + ServerVerifyEcdhX + ServerVerifyEcdhY),
-    Curve)
+ServerEcdhSrc = ("307702010104204278b98b02fb5c54cc61cfa661a4932ab382134ffbd9bdd021a6fdab0dedb155a00a06082a8648ce3d03010"
+                 "7a144034200049e1cc80d6f65ba5d83d132fea83fb3d3e3c9168ef6d4d6958dc424fd52bdafd75400ce69a6170fcdf2f2d479"
+                 "fab9a320d91b7d8b2e741ffd86972e785e683eae")
+Curve = ecdsa.NIST256p
+ServerEcdh = ecdsa.SigningKey.from_der(bytes.fromhex(ServerEcdhSrc))
+ServerVerifyEcdh = ServerEcdh.get_verifying_key()
 
 TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 0x0300C02B

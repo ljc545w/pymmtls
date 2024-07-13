@@ -18,15 +18,15 @@ class ServerHello:
         if len(data) != (pack_len + 4):
             raise RuntimeError("data corrupted")
         data = data[4:]
-        # skip flag
+        # skip flag, 0x02
         data = data[1:]
-        protocol_version = int.from_bytes(data[:2], "big")
+        protocol_version = int.from_bytes(data[:2], "little")
         data = data[2:]
         cipher_suites = int.from_bytes(data[:2], "big")
         data = data[2:]
         # skip server random
         data = data[32:]
-        # skip exntensions package length
+        # skip extensions package length
         data = data[4:]
         # skip extensions count
         data = data[1:]
