@@ -41,6 +41,9 @@ class MMTLSServer:
         self.server = socket.socket(socket.AF_INET,
                                     socket.SOCK_STREAM,
                                     socket.IPPROTO_TCP)
+        self.server.setsockopt(socket.SOL_SOCKET,
+                               socket.SO_REUSEADDR,
+                               1)
         self.server.bind((host, port))
         self.server.listen(5)
         num = 0
@@ -64,6 +67,7 @@ class MMTLSConnection:
         self.verify_ecdh: 'ecdsa.keys.SigningKey' = ServerEcdh
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
+        self.time_out: int = 35
         self.session: 'Session' or None = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
@@ -76,10 +80,6 @@ class MMTLSConnection:
             return
         while True:
             try:
-                readable, _, _ = select.select([self.conn], [], [], 0)
-                if self.conn not in readable:
-                    time.sleep(0.001)
-                    continue
                 data_record = self.read_data_record()
                 if data_record is None:
                     time.sleep(0.001)
@@ -123,8 +123,8 @@ class MMTLSConnection:
                 client_public_key.pubkey.point,
                 public_ecdh_private_key)
             rc = self.compute_traffic_key(
-                com_key, 
-                self.hkdf_expand("handshake key expansion", self.hand_shake_hasher), 
+                com_key,
+                self.hkdf_expand("handshake key expansion", self.hand_shake_hasher),
                 traffic_key)
             assert rc >= 0
             rc = self.send_signature(traffic_key)
@@ -136,13 +136,13 @@ class MMTLSConnection:
             rc = self.read_client_finish(com_key, traffic_key)
             assert rc >= 0
             expanded_secret = hkdf_expand(
-                hashlib.sha256, 
-                com_key, 
-                self.hkdf_expand("expanded secret", self.hand_shake_hasher), 
+                hashlib.sha256,
+                com_key,
+                self.hkdf_expand("expanded secret", self.hand_shake_hasher),
                 32)
             rc = self.compute_traffic_key(
-                expanded_secret, 
-                self.hkdf_expand("application data key expansion", self.hand_shake_hasher), 
+                expanded_secret,
+                self.hkdf_expand("application data key expansion", self.hand_shake_hasher),
                 app_key)
             assert rc >= 0
             self.session.app_key = app_key
@@ -152,20 +152,20 @@ class MMTLSConnection:
         finally:
             self.logger.info("Long link %d handshake end!!!!error_code: %d" % (self.client_id, rc))
         return rc
-    
+
     def close(self) -> int:
         if self.conn is not None:
             self.conn.close()
             self.conn = None
         self.status = 0
         return 0
-    
+
     def reset(self) -> int:
         self.client_seq_num = 0
         self.server_seq_num = 0
         self.hand_shake_hasher.reset()
         return 0
-    
+
     @property
     def hand_shake_complete(self) -> bool:
         return self.status == 1
@@ -179,7 +179,7 @@ class MMTLSConnection:
         hello = ClientHello.read_client_hello(record.data)
         self.logger.info(record.data.hex().upper())
         return hello
-    
+
     def send_server_hello(self, hello: 'ServerHello') -> int:
         data = hello.serialize()
         self.hand_shake_hasher.write(data)
@@ -190,7 +190,7 @@ class MMTLSConnection:
             return -1
         self.logger.info(packet.hex().upper())
         return 0
-    
+
     def send_signature(self, traffic_key: 'TrafficKeyPair') -> int:
         digest = self.hand_shake_hasher.sum()
         sign_data = self.verify_ecdh.sign(digest,
@@ -207,9 +207,9 @@ class MMTLSConnection:
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
         return 0
-    
+
     def send_new_session_ticket(self,
-                                com_key: bytes, 
+                                com_key: bytes,
                                 traffic_key: 'TrafficKeyPair') -> int:
         new_session_ticket = NewSessionTicket.create_new_session_ticket()
         record = MMTLSRecord.create_system_record(new_session_ticket.serialize())
@@ -220,27 +220,27 @@ class MMTLSConnection:
         s_len = self.conn.send(packet_data)
         assert s_len == len(packet_data)
         psk_access = hkdf_expand(
-            hashlib.sha256, 
-            com_key, 
-            self.hkdf_expand("PSK_ACCESS", self.hand_shake_hasher), 
+            hashlib.sha256,
+            com_key,
+            self.hkdf_expand("PSK_ACCESS", self.hand_shake_hasher),
             32)
         psk_refresh = hkdf_expand(
-            hashlib.sha256, 
-            com_key, 
-            self.hkdf_expand("PSK_REFRESH", self.hand_shake_hasher), 
+            hashlib.sha256,
+            com_key,
+            self.hkdf_expand("PSK_REFRESH", self.hand_shake_hasher),
             32)
         self.session = Session(new_session_ticket, psk_access, psk_refresh)
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
         return 0
-    
+
     def send_server_finish(self,
-                           com_key: bytes, 
+                           com_key: bytes,
                            traffic_key: 'TrafficKeyPair') -> int:
         server_finish_key = hkdf_expand(
-            hashlib.sha256, 
-            com_key, 
-            self.hkdf_expand("server finished"), 
+            hashlib.sha256,
+            com_key,
+            self.hkdf_expand("server finished"),
             32)
         digest = self.hand_shake_hasher.sum()
         security_param = self.hmac(server_finish_key, digest)
@@ -254,9 +254,9 @@ class MMTLSConnection:
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
         return 0
-    
+
     def read_client_finish(self,
-                           com_key: bytes, 
+                           com_key: bytes,
                            traffic_key: 'TrafficKeyPair') -> int:
         record = MMTLSRecord()
         rc = self.read_record(record)
@@ -265,9 +265,9 @@ class MMTLSConnection:
         assert rc >= 0
         client_finish = ClientFinish.read_client_finish(record.data)
         client_finish_key = hkdf_expand(
-            hashlib.sha256, 
-            com_key, 
-            self.hkdf_expand("client finished"), 
+            hashlib.sha256,
+            com_key,
+            self.hkdf_expand("client finished"),
             32)
         digest = self.hand_shake_hasher.sum()
         security_param = self.hmac(client_finish_key, digest)
@@ -276,6 +276,11 @@ class MMTLSConnection:
         self.client_seq_num += 1
         self.logger.info(record.data.hex().upper())
         return 0
+
+    @property
+    def readable(self) -> bool:
+        readable, _, _ = select.select([self.conn], [], [], self.time_out)
+        return self.conn in readable
 
     def read_data_record(self) -> 'DataRecord' or None:
         record = MMTLSRecord()
@@ -301,13 +306,16 @@ class MMTLSConnection:
         s_len = self.conn.send(packet)
         assert s_len == len(packet)
         return 0
-    
+
     def read_record(self, record: 'MMTLSRecord') -> int:
         if self.conn is None:
             return -1
+        readable = self.readable
+        if not readable:
+            raise socket.error("client has disconnected")
         header = self.conn.recv(5)
         if len(header) == 0:
-            return -1
+            raise socket.error("client has disconnected")
         pack_len = (header[3] << 8) | header[4]
         payload = b""
         while len(payload) < pack_len:
@@ -346,23 +354,22 @@ class MMTLSConnection:
         traffic_key.client_nonce = key[32:44]
         traffic_key.server_nonce = key[44:]
         return 0
-    
+
     @staticmethod
-    def hkdf_expand(prefix: str, 
+    def hkdf_expand(prefix: str,
                     hasher: 'HandShakeHasher' = None) -> bytes:
         result = bytearray(prefix.encode())
         if hasher is not None:
             hash_sum = hasher.sum()
             result.extend(hash_sum)
         return bytes(result)
-    
+
     @staticmethod
     def hmac(k: bytes, d: bytes) -> bytes:
         hmac_sha256 = hmac.new(k, d, digestmod=hashlib.sha256)
         result = hmac_sha256.digest()
         return result
-    
+
     def gen_key_pairs(self) -> int:
         self.public_ecdh = ecdsa.SigningKey.generate(Curve)
         return 0
-    
