@@ -67,22 +67,22 @@ class MMTLSClient:
                     verify_ecdh_der, 
                     self.session.tk.tickets[1])
             else:
-                client_hello = ClientHello.new_ecdh_hello(
+                client_hello = ClientHello.new_ecdhe_hello(
                     public_ecdh_der, 
                     verify_ecdh_der)
             rc = self.send_client_hello(client_hello)
             assert rc >= 0
             server_hello = self.read_server_hello()
             com_key = None
-            if server_hello.cipher_suite == TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff:
-                server_public_key = ecdsa.VerifyingKey.from_string(server_hello.extensions[0x11][0], Curve)
+            if server_hello.cipher_suite == (TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff):
+                server_public_key = ecdsa.VerifyingKey.from_string(server_hello.extensions[server_hello.cipher_suite][0], Curve)
                 public_ecdh_private_key = self.public_ecdh.privkey.secret_multiplier
                 com_key = self.compute_ephemeral_secret(server_public_key.pubkey.point, 
                                                         public_ecdh_private_key)
             elif server_hello.cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
                 pass
             else:
-                raise RuntimeError("unsupport cipher suite")
+                raise RuntimeError(f"unsupport cipher suite {server_hello.cipher_suite}")
             assert com_key is not None
             rc = self.compute_traffic_key(
                 com_key, 

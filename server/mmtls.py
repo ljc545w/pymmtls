@@ -114,7 +114,7 @@ class MMTLSConnection:
             assert rc >= 0
             public_ecdh_der = self.public_ecdh.get_verifying_key().to_string("uncompressed")
             client_hello = self.read_client_hello()
-            server_hello = ServerHello.new_ecdh_hello(public_ecdh_der)
+            server_hello = ServerHello.new_ecdhe_hello(public_ecdh_der)
             rc = self.send_server_hello(server_hello)
             assert rc >= 0
             client_public_key = ecdsa.VerifyingKey.from_string(client_hello.get_client_public_key(), Curve)

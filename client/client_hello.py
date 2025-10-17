@@ -20,18 +20,18 @@ class ClientHello:
     def __init__(self):
         self.protocol_version: int = 0
         self.cipher_suites: List[int] = []
-        self.random: Union[bytes, None] = None
+        self.client_random: Union[bytes, None] = None
         self.timestamp: int = 0
         self.extensions: Union[Dict[int, List[bytes]], None] = None
 
     @classmethod
-    def new_ecdh_hello(cls,
+    def new_ecdhe_hello(cls,
                        client_public_key: bytes,
                        client_verify_key: bytes) -> 'ClientHello':
         instance = cls()
         instance.protocol_version = ProtocolVersion
         instance.timestamp = int(time.time())
-        instance.random = utility.get_random_key(32)
+        instance.client_random = utility.get_random_key(32)
         cipher_suites = []
         extensions = {}
         cipher_suites.append(TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff)
@@ -51,7 +51,7 @@ class ClientHello:
         instance = cls()
         instance.protocol_version = ProtocolVersion
         instance.timestamp = int(time.time())
-        instance.random = utility.get_random_key(32)
+        instance.client_random = utility.get_random_key(32)
         cipher_suites = []
         extensions = {}
         cipher_suites.append(TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff)
@@ -72,7 +72,7 @@ class ClientHello:
         instance = cls()
         instance.protocol_version = ProtocolVersion
         instance.timestamp = int(time.time())
-        instance.random = utility.get_random_key(32)
+        instance.client_random = utility.get_random_key(32)
         cipher_suites = []
         extensions = {}
         cipher_suites.append(TLS_PSK_WITH_AES_128_GCM_SHA256)
@@ -90,7 +90,7 @@ class ClientHello:
         result.append(len(self.cipher_suites))
         for cipherSuite in self.cipher_suites:
             result.extend(cipherSuite.to_bytes(2, 'big'))
-        result.extend(self.random)
+        result.extend(self.client_random)
         result.extend(self.timestamp.to_bytes(4, 'big'))
         cipher_pos = len(result)
         result.extend([0x0] * 4)
