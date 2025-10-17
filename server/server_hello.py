@@ -69,7 +69,17 @@ class ServerHello:
                 else:
                     data = data[ext_pkg_len:]
         elif cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
-            pass
+            # extension package length
+            ext_pkg_len = int.from_bytes(data[:4], "big")
+            data = data[4:]
+            # extension type
+            ext_type = int.from_bytes(data[:2], "big")
+            data = data[2:]
+            ext_len = int.from_bytes(data[:4], "big")
+            data = data[4:]
+            ext = data[:ext_len]
+            extensions[cipher_suite].append(ext)
+            data = data[ext_len:]
         else:
             raise RuntimeError(f"unsupport cipher suite {cipher_suite}")
         instance = cls()
@@ -80,14 +90,14 @@ class ServerHello:
         return instance
     
     @classmethod
-    def new_pskone_hello(cls, psk_key: bytes) -> 'ServerHello':
+    def new_pskone_hello(cls, server_mac: bytes, server_random: bytes) -> 'ServerHello':
         instance = cls()
         instance.protocol_version = ProtocolVersion
         cipher = TLS_PSK_WITH_AES_128_GCM_SHA256
         instance.cipher_suite = cipher
-        instance.server_random = get_random_key(32)
+        instance.server_random = server_random
         extensions = {
-            cipher: [psk_key],
+            cipher: [server_mac],
         }
         instance.extensions = extensions
         return instance
@@ -122,7 +132,6 @@ class ServerHello:
             result.extend([0x0] * 4)
             extension_type = 0xf
             result.extend(extension_type.to_bytes(2, "big"))
-            result.append(0x1)
             key_pos = len(result)
             result.extend([0x0] * 4)
             extension = self.extensions[cipher_suite][0]

@@ -7,6 +7,7 @@ Created on Thu Jul 11 17:35:40 2024
 
 import os
 import sys
+import copy
 import zlib
 
 local_path = os.path.split(os.path.abspath(__file__))[0]
@@ -29,8 +30,8 @@ def test_mmtls_long():
 def test_mmtls_short():
     client = MMTLSClientShort()
     session = Session.load_session(os.path.join(local_path, "mm.session"))
-    assert session is not None
-    client.session = session
+    assert session is not None, "load session failed"
+    client.session = copy.deepcopy(session)
     result = client.request("dns.weixin.qq.com.cn", "/cgi-bin/micromsg-bin/newgetdns", b"")
     header, data = tuple(result.split(b"\r\n\r\n"))
     try:

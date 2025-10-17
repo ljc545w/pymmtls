@@ -39,3 +39,11 @@ ServerEcdh = ecdsa.SigningKey.from_der(bytes.fromhex(ServerEcdhDer))
 ServerVerifyEcdh = ServerEcdh.get_verifying_key()
 
 TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 = 0x0300C02B
+
+# 是否支持通过session ticket进行PSK-PSKONE模式的会话恢复
+USE_PSKONE_RESUME = True
+# session ticket的有效期，单位秒
+SESSION_TICKET_SHORT_LIFETIME = 7 * 24 * 60 *60
+SESSION_TICKET_LONG_LIFETIME  = 30 * 24 * 60 *60
+# session ticket加密使用的秘钥，如用于生产环境请务必替换该值!!!
+SESSION_TICKET_KEY = b"this_is_a_test_key_for_mmtls_session_ticket"

@@ -19,16 +19,19 @@ import threading
 from ecdsa.ellipticcurve import PointJacobi
 from typing import Dict, Union
 from .hand_shake_hasher import HandShakeHasher
-from .session import Session, TrafficKeyPair
+from .session import TrafficKeyPair
 from .client_hello import ClientHello
 from .client_finish import ClientFinish
 from .server_hello import ServerHello
 from .server_finish import ServerFinish
-from .session_ticket import NewSessionTicket
+from .session_ticket import NewSessionTicket, SessionTicket
 from .record import MMTLSRecord, DataRecord
 from .signature import Signature
 from .const import Curve, ServerEcdh, TCP_NoopRequest, TCP_NoopResponse
-from .utility import hkdf_expand, get_logger, singleton
+from .utility import hkdf_expand, get_logger, singleton, get_random_key
+from .const import (
+    TLS_PSK_WITH_AES_128_GCM_SHA256
+)
 
 
 @singleton
@@ -36,6 +39,7 @@ class MMTLSServer:
     def __init__(self):
         self.server: Union['socket.socket', None] = None
         self.clients: Dict[int, MMTLSConnection] = {}
+        self.logger = get_logger()
 
     def run_forever(self, host, port):
         self.server = socket.socket(socket.AF_INET,
@@ -49,12 +53,26 @@ class MMTLSServer:
         num = 0
         while True:
             num += 1
-            conn, address = self.server.accept()
+            try:
+                conn, address = self.server.accept()
+            except socket.error as e:
+                self.logger.error(str(e))
+                break
             client = MMTLSConnection(conn, address, num)
             client_handler = threading.Thread(target=client.keep_alive)
             client_handler.daemon = True
             client_handler.start()
             self.clients[num] = client
+
+    def stop(self):
+        for client_id in list(self.clients.keys()):
+            client = self.clients[client_id]
+            client.close()
+            self.clients.pop(client_id)
+        if self.server is not None:
+            self.server.close()
+            self.server = None
+        return 0
 
 
 class MMTLSConnection:
@@ -68,7 +86,7 @@ class MMTLSConnection:
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
         self.time_out: int = 35
-        self.session: Union['Session', None] = None
+        self.app_key: Union['TrafficKeyPair', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
@@ -77,6 +95,7 @@ class MMTLSConnection:
         if self.hand_shake() != 0:
             self.close()
             MMTLSServer().clients.pop(self.client_id)
+            self.logger.info("client %d handshake failed, connection closed." % self.client_id)
             return
         while True:
             try:
@@ -86,9 +105,9 @@ class MMTLSConnection:
                     continue
                 if data_record.data_type == TCP_NoopRequest:
                     rc = self.send_data_record(TCP_NoopResponse, data_record.seq, b"")
-                    assert rc >= 0
+                    assert rc >= 0, "send noop response failed"
                 else:
-                    print("unknown data type: %d" % data_record.data_type)
+                    self.logger.info("unknown data type: %d" % data_record.data_type)
                     break
             except socket.error as e:
                 self.logger.error(str(e))
@@ -112,29 +131,48 @@ class MMTLSConnection:
             self.reset()
             rc = self.gen_key_pairs()
             assert rc >= 0
-            public_ecdh_der = self.public_ecdh.get_verifying_key().to_string("uncompressed")
             client_hello = self.read_client_hello()
-            server_hello = ServerHello.new_ecdhe_hello(public_ecdh_der)
-            rc = self.send_server_hello(server_hello)
-            assert rc >= 0
-            client_public_key = ecdsa.VerifyingKey.from_string(client_hello.get_client_public_key(), Curve)
-            public_ecdh_private_key = self.public_ecdh.privkey.secret_multiplier
-            com_key = self.compute_ephemeral_secret(
-                client_public_key.pubkey.point,
-                public_ecdh_private_key)
+            com_key = None
+            if TLS_PSK_WITH_AES_128_GCM_SHA256 in client_hello.cipher_suites:
+                session_ticket_data = client_hello.get_session_ticket_data()
+                session_ticket = SessionTicket.read_session_ticket(session_ticket_data)
+                ticket = session_ticket.parse_ticket()
+                if ticket is not None:
+                    self.logger.info("session ticket valid, use PSK-PSKONE mode to resume session")
+                    server_random = get_random_key(32)
+                    client_random = client_hello.client_random
+                    server_mac = self.hmac(client_random, server_random)
+                    server_mac = self.hmac(ticket.key, server_mac)
+                    server_hello = ServerHello.new_pskone_hello(server_mac, server_random)
+                    rc = self.send_server_hello(server_hello)
+                    assert rc >= 0, "send server hello failed"
+                    # 通过age_add更新com_key，这部分后续要考虑是否优化以获取更高的性能
+                    com_key = hkdf_expand(hashlib.sha256, ticket.key, ticket.age_add, 32)
+                else:
+                    self.logger.info("session ticket invalid or expired, use ECDHE mode to resume session")
+            if com_key is None:
+                public_ecdh_der = self.public_ecdh.get_verifying_key().to_string("uncompressed")
+                server_hello = ServerHello.new_ecdhe_hello(public_ecdh_der)
+                rc = self.send_server_hello(server_hello)
+                assert rc >= 0, "send server hello failed"
+                client_public_key = ecdsa.VerifyingKey.from_string(client_hello.get_client_public_key(), Curve)
+                public_ecdh_private_key = self.public_ecdh.privkey.secret_multiplier
+                com_key = self.compute_ephemeral_secret(client_public_key.pubkey.point,
+                                                        public_ecdh_private_key)
+            assert com_key is not None, "failed to compute common key"
             rc = self.compute_traffic_key(
-                com_key,
-                self.hkdf_expand("handshake key expansion", self.hand_shake_hasher),
-                traffic_key)
-            assert rc >= 0
+                    com_key,
+                    self.hkdf_expand("handshake key expansion", self.hand_shake_hasher),
+                    traffic_key)
+            assert rc >= 0, "compute traffic key failed"
             rc = self.send_signature(traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "send signature failed"
             rc = self.send_new_session_ticket(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "send new session ticket failed"
             rc = self.send_server_finish(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "send server finish failed"
             rc = self.read_client_finish(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "read client finish failed"
             expanded_secret = hkdf_expand(
                 hashlib.sha256,
                 com_key,
@@ -145,9 +183,12 @@ class MMTLSConnection:
                 self.hkdf_expand("application data key expansion", self.hand_shake_hasher),
                 app_key)
             assert rc >= 0
-            self.session.app_key = app_key
+            self.app_key = app_key
             self.status = 1
         except AssertionError:
+            rc = -1
+        except Exception as e:
+            self.logger.error(str(e))
             rc = -1
         finally:
             self.logger.info("Long link %d handshake end!!!!error_code: %d" % (self.client_id, rc))
@@ -211,7 +252,7 @@ class MMTLSConnection:
     def send_new_session_ticket(self,
                                 com_key: bytes,
                                 traffic_key: 'TrafficKeyPair') -> int:
-        new_session_ticket = NewSessionTicket.create_new_session_ticket()
+        new_session_ticket = NewSessionTicket.create_new_session_ticket(com_key)
         record = MMTLSRecord.create_system_record(new_session_ticket.serialize())
         self.hand_shake_hasher.write(record.data)
         rc = record.encrypt(traffic_key, self.server_seq_num)
@@ -219,17 +260,6 @@ class MMTLSConnection:
         packet_data = record.serialize()
         s_len = self.conn.send(packet_data)
         assert s_len == len(packet_data)
-        psk_access = hkdf_expand(
-            hashlib.sha256,
-            com_key,
-            self.hkdf_expand("PSK_ACCESS", self.hand_shake_hasher),
-            32)
-        psk_refresh = hkdf_expand(
-            hashlib.sha256,
-            com_key,
-            self.hkdf_expand("PSK_REFRESH", self.hand_shake_hasher),
-            32)
-        self.session = Session(new_session_ticket, psk_access, psk_refresh)
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
         return 0
@@ -287,7 +317,7 @@ class MMTLSConnection:
         rc = self.read_record(record)
         if rc < 0:
             return None
-        rc = record.decrypt(self.session.app_key, self.client_seq_num)
+        rc = record.decrypt(self.app_key, self.client_seq_num)
         self.client_seq_num += 1
         assert rc >= 0
         data_record = DataRecord.read_data_record(record.data)
@@ -299,7 +329,7 @@ class MMTLSConnection:
                                                 seq,
                                                 data)
         self.logger.info(record.data.hex())
-        rc = record.encrypt(self.session.app_key, self.server_seq_num)
+        rc = record.encrypt(self.app_key, self.server_seq_num)
         assert rc >= 0
         self.server_seq_num += 1
         packet = record.serialize()

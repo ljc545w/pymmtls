@@ -12,6 +12,7 @@ from .const import (
 )
 from . import utility
 import time
+import copy
 from .session_ticket import SessionTicket
 from typing import List, Dict, Union
 
@@ -56,8 +57,10 @@ class ClientHello:
         extensions = {}
         cipher_suites.append(TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff)
         cipher_suites.append(TLS_PSK_WITH_AES_128_GCM_SHA256)
-        session_ticket.ticket_age_add = b""
-        ticket_data = session_ticket.serialize()
+        tmp_session_ticket = copy.deepcopy(session_ticket)
+        # 这里清空 ticket_age_add, 自定义server会从ticket中解密出该值, 标准mmtls行为未知
+        tmp_session_ticket.ticket_age_add = b""
+        ticket_data = tmp_session_ticket.serialize()
         extensions[TLS_PSK_WITH_AES_128_GCM_SHA256] = [ticket_data]
         extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff] = [
             client_public_key,

@@ -19,13 +19,14 @@ class TrafficKeyPair:
 
 class Session:
     def __init__(self, 
+                 resume_key: bytes,
                  tk: 'NewSessionTicket', 
                  psk_access: bytes, 
                  psk_refresh: bytes):
+        self.resume_key: Union[bytes, None] = resume_key
         self.tk = tk
         self.psk_access = psk_access
         self.psk_refresh = psk_refresh
-        self.app_key: Union['TrafficKeyPair', None] = None
         
     def save(self, path: str) -> bool:
         result = self.serialize()
@@ -36,6 +37,8 @@ class Session:
     
     def serialize(self) -> bytes:
         result = bytearray()
+        result.extend(len(self.resume_key).to_bytes(2, 'big'))
+        result.extend(self.resume_key)
         result.extend(len(self.psk_access).to_bytes(2, 'big'))
         result.extend(self.psk_access)
         result.extend(len(self.psk_refresh).to_bytes(2, 'big'))
@@ -57,6 +60,10 @@ class Session:
     def parse_from_string(cls, content: bytes) -> 'Session':
         length = int.from_bytes(content[:2], 'big')
         content = content[2:]
+        com_key = content[:length]
+        content = content[length:]
+        length = int.from_bytes(content[:2], 'big')
+        content = content[2:]
         psk_access = content[:length]
         content = content[length:]
         length = int.from_bytes(content[:2], 'big')
@@ -64,5 +71,5 @@ class Session:
         psk_refresh = content[:length]
         content = content[length:]
         tk = NewSessionTicket.read_new_session_ticket(content)
-        instance = cls(tk, psk_access, psk_refresh)
+        instance = cls(com_key, tk, psk_access, psk_refresh)
         return instance

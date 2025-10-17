@@ -41,6 +41,7 @@ class MMTLSClient:
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
         self.session: Union['Session', None] = None
+        self.app_key: Union['TrafficKeyPair', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
@@ -80,23 +81,32 @@ class MMTLSClient:
                 com_key = self.compute_ephemeral_secret(server_public_key.pubkey.point, 
                                                         public_ecdh_private_key)
             elif server_hello.cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
-                pass
+                server_mac = server_hello.extensions[server_hello.cipher_suite][0]
+                client_random = client_hello.client_random
+                server_random = server_hello.server_random
+                client_mac = self.hmac(client_random, server_random)
+                client_mac = self.hmac(self.session.resume_key, client_mac)
+                assert client_mac == server_mac, "PSK identity verification failed"
+                com_key = hkdf_expand(hashlib.sha256, 
+                                      self.session.resume_key, 
+                                      self.session.tk.tickets[1].ticket_age_add, 
+                                      32)
             else:
                 raise RuntimeError(f"unsupport cipher suite {server_hello.cipher_suite}")
-            assert com_key is not None
+            assert com_key is not None, "compute common key failed"
             rc = self.compute_traffic_key(
-                com_key, 
-                self.hkdf_expand("handshake key expansion", self.hand_shake_hasher), 
-                traffic_key)
-            assert rc >= 0
+                    com_key, 
+                    self.hkdf_expand("handshake key expansion", self.hand_shake_hasher), 
+                    traffic_key)
+            assert rc >= 0, "compute traffic key failed"
             rc = self.read_signature(traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "read signature failed"
             rc = self.read_new_session_ticket(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "read new session ticket failed"
             rc = self.read_server_finish(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "read server finish failed"
             rc = self.send_client_finish(com_key, traffic_key)
-            assert rc >= 0
+            assert rc >= 0, "send client finish failed"
             expanded_secret = hkdf_expand(
                 hashlib.sha256, 
                 com_key, 
@@ -106,8 +116,8 @@ class MMTLSClient:
                 expanded_secret, 
                 self.hkdf_expand("application data key expansion", self.hand_shake_hasher), 
                 app_key)
-            assert rc >= 0
-            self.session.app_key = app_key
+            assert rc >= 0, "compute app key failed"
+            self.app_key = app_key
             self.status = 1
         except socket.error as e:
             rc = -1
@@ -198,7 +208,7 @@ class MMTLSClient:
             com_key, 
             self.hkdf_expand("PSK_REFRESH", self.hand_shake_hasher), 
             32)
-        self.session = Session(new_session_ticket, psk_access, psk_refresh)
+        self.session = Session(com_key, new_session_ticket, psk_access, psk_refresh)
         self.hand_shake_hasher.write(record.data)
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
@@ -256,7 +266,7 @@ class MMTLSClient:
             0xffffffff, 
             b"")
         self.logger.info(noop_record.data.hex().upper())
-        rc = noop_record.encrypt(self.session.app_key, self.client_seq_num)
+        rc = noop_record.encrypt(self.app_key, self.client_seq_num)
         assert rc >= 0
         packet = noop_record.serialize()
         s_len = self.conn.send(packet)
@@ -269,7 +279,7 @@ class MMTLSClient:
         record = MMTLSRecord()
         rc = self.read_record(record)
         assert rc >= 0
-        rc = record.decrypt(self.session.app_key, self.server_seq_num)
+        rc = record.decrypt(self.app_key, self.server_seq_num)
         assert rc >= 0
         data = record.data
         pack_len = int.from_bytes(data[:4], 'big')

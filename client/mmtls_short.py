@@ -23,6 +23,7 @@ class MMTLSClientShort:
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
         self.session: Union['Session', None] = None
+        self.app_key: Union['TrafficKeyPair', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
@@ -34,7 +35,7 @@ class MMTLSClientShort:
         result = bytearray()
         try:
             ip = get_host_by_name(host)
-            assert self.session is not None
+            assert self.session is not None, "session is None"
             http_packet = self.pack_http(ip, path, data)
             headers = {
                 "Host": host,
@@ -60,7 +61,7 @@ class MMTLSClientShort:
                 self.hkdf_expand("handshake key expansion",
                                  self.hand_shake_hasher)
             )
-            self.session.app_key = traffic_key
+            self.app_key = traffic_key
             rc = self.read_server_finish()
             assert rc >= 0
             data_record = self.read_data_record()
@@ -149,7 +150,7 @@ class MMTLSClientShort:
     def read_server_finish(self) -> int:
         server_finish_record = MMTLSRecord.read_record(self.packet_reader)
         self.packet_reader = self.packet_reader[5 + server_finish_record.length:]
-        rc = server_finish_record.decrypt(self.session.app_key, self.server_seq_num)
+        rc = server_finish_record.decrypt(self.app_key, self.server_seq_num)
         assert rc >= 0
         self.server_seq_num += 1
         self.logger.info(server_finish_record.data.hex().upper())
@@ -158,7 +159,7 @@ class MMTLSClientShort:
     def read_data_record(self) -> 'MMTLSRecord':
         record = MMTLSRecord.read_record(self.packet_reader)
         self.packet_reader = self.packet_reader[5 + record.length:]
-        rc = record.decrypt(self.session.app_key, self.server_seq_num)
+        rc = record.decrypt(self.app_key, self.server_seq_num)
         assert rc >= 0
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())
@@ -167,7 +168,7 @@ class MMTLSClientShort:
     def read_abort(self) -> int:
         record = MMTLSRecord.read_record(self.packet_reader)
         self.packet_reader = self.packet_reader[5 + record.length:]
-        rc = record.decrypt(self.session.app_key, self.server_seq_num)
+        rc = record.decrypt(self.app_key, self.server_seq_num)
         assert rc >= 0
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())

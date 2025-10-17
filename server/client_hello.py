@@ -207,7 +207,7 @@ class ClientHello:
             else:
                 raise RuntimeError(f"cipher ({cipher}) not support")
         instance.protocol_version = protocol_version
-        instance.cipher_suites = cipher_suites_len
+        instance.cipher_suites = cipher_suites
         instance.client_random = random
         instance.timestamp = timestamp
         instance.extensions = extensions
@@ -215,3 +215,6 @@ class ClientHello:
 
     def get_client_public_key(self) -> bytes:
         return self.extensions[TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff][0]
+
+    def get_session_ticket_data(self) -> bytes:
+        return self.extensions[TLS_PSK_WITH_AES_128_GCM_SHA256][0]

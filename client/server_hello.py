@@ -66,7 +66,17 @@ class ServerHello:
                 else:
                     data = data[ext_pkg_len:]
         elif cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
-            pass
+            # extension package length
+            ext_pkg_len = int.from_bytes(data[:4], "big")
+            data = data[4:]
+            # extension type
+            ext_type = int.from_bytes(data[:2], "big")
+            data = data[2:]
+            ext_len = int.from_bytes(data[:4], "big")
+            data = data[4:]
+            ext = data[:ext_len]
+            extensions[cipher_suite].append(ext)
+            data = data[ext_len:]
         else:
             raise RuntimeError(f"unsupport cipher suite {cipher_suite}")
         instance = cls()
