@@ -167,7 +167,7 @@ class MMTLSConnection:
             assert rc >= 0, "compute traffic key failed"
             rc = self.send_signature(traffic_key)
             assert rc >= 0, "send signature failed"
-            rc = self.send_new_session_ticket(com_key, traffic_key)
+            rc = self.send_new_session_ticket(client_hello.timestamp, com_key, traffic_key)
             assert rc >= 0, "send new session ticket failed"
             rc = self.send_server_finish(com_key, traffic_key)
             assert rc >= 0, "send server finish failed"
@@ -250,9 +250,10 @@ class MMTLSConnection:
         return 0
 
     def send_new_session_ticket(self,
+                                timestamp: int,
                                 com_key: bytes,
                                 traffic_key: 'TrafficKeyPair') -> int:
-        new_session_ticket = NewSessionTicket.create_new_session_ticket(com_key)
+        new_session_ticket = NewSessionTicket.create_new_session_ticket(com_key, timestamp)
         record = MMTLSRecord.create_system_record(new_session_ticket.serialize())
         self.hand_shake_hasher.write(record.data)
         rc = record.encrypt(traffic_key, self.server_seq_num)

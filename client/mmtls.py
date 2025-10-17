@@ -65,7 +65,7 @@ class MMTLSClient:
             if self.session is not None and len(self.session.tk.tickets) > 1:
                 client_hello = ClientHello.new_pskone_hello(
                     public_ecdh_der, 
-                    verify_ecdh_der, 
+                    verify_ecdh_der,
                     self.session.tk.tickets[1])
             else:
                 client_hello = ClientHello.new_ecdhe_hello(
@@ -101,7 +101,7 @@ class MMTLSClient:
             assert rc >= 0, "compute traffic key failed"
             rc = self.read_signature(traffic_key)
             assert rc >= 0, "read signature failed"
-            rc = self.read_new_session_ticket(com_key, traffic_key)
+            rc = self.read_new_session_ticket(client_hello.timestamp, com_key, traffic_key)
             assert rc >= 0, "read new session ticket failed"
             rc = self.read_server_finish(com_key, traffic_key)
             assert rc >= 0, "read server finish failed"
@@ -189,7 +189,8 @@ class MMTLSClient:
         self.logger.info(record.data.hex().upper())
         return 0
     
-    def read_new_session_ticket(self, 
+    def read_new_session_ticket(self,
+                                timestamp: int,
                                 com_key: bytes, 
                                 traffic_key: 'TrafficKeyPair') -> int:
         record = MMTLSRecord()
@@ -208,7 +209,7 @@ class MMTLSClient:
             com_key, 
             self.hkdf_expand("PSK_REFRESH", self.hand_shake_hasher), 
             32)
-        self.session = Session(com_key, new_session_ticket, psk_access, psk_refresh)
+        self.session = Session(timestamp, com_key, new_session_ticket, psk_access, psk_refresh)
         self.hand_shake_hasher.write(record.data)
         self.server_seq_num += 1
         self.logger.info(record.data.hex().upper())

@@ -12,8 +12,11 @@ from .hand_shake_hasher import HandShakeHasher
 from .session import Session, TrafficKeyPair
 from .record import MMTLSRecord
 from .client_hello import ClientHello
+from .server_hello import ServerHello
 from .utility import hkdf_expand, get_random_key, get_logger, get_host_by_name
+from .const import TLS_PSK_WITH_AES_128_GCM_SHA256
 from typing import Union
+
 
 class MMTLSClientShort:
     def __init__(self):
@@ -145,7 +148,13 @@ class MMTLSClientShort:
         self.hand_shake_hasher.write(server_hello_record.data)
         self.server_seq_num += 1
         self.logger.info(server_hello_record.data.hex().upper())
-        return 0
+        server_hello = ServerHello.read_server_hello(server_hello_record.data)
+        if server_hello.cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
+            return 0
+        elif server_hello.cipher_suite == 0x7302:
+            self.logger.info("session expired")
+            return -2
+        return -1
 
     def read_server_finish(self) -> int:
         server_finish_record = MMTLSRecord.read_record(self.packet_reader)

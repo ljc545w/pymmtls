@@ -153,7 +153,7 @@ class SessionTicket:
         return instance
 
     @classmethod
-    def create_session_ticket(cls, ticket_type: int, key: bytes) -> 'SessionTicket':
+    def create_session_ticket(cls, ticket_type: int, key: bytes, timestamp: int) -> 'SessionTicket':
         instance = cls()
         instance.ticket_type = ticket_type
         if ticket_type == 1:
@@ -161,7 +161,6 @@ class SessionTicket:
             instance.reserved = 72
             instance.ticket_age_add = b""
             instance.ticket_life_time = SESSION_TICKET_SHORT_LIFETIME
-            timestamp = int(time.time())
             ticket = Ticket.create_ticket(key, timestamp, instance.ticket_age_add)
             instance.ticket = ticket_encrypt(instance.nonce, ticket.serialize())
         elif ticket_type == 2:
@@ -169,7 +168,6 @@ class SessionTicket:
             instance.reserved = 72
             instance.ticket_age_add = get_random_key(32)
             instance.ticket_life_time = SESSION_TICKET_LONG_LIFETIME
-            timestamp = int(time.time())
             ticket = Ticket.create_ticket(key, timestamp, instance.ticket_age_add)
             instance.ticket = ticket_encrypt(instance.nonce, ticket.serialize())
         return instance
@@ -223,10 +221,11 @@ class NewSessionTicket:
         return instance
 
     @classmethod
-    def create_new_session_ticket(cls, key: bytes) -> 'NewSessionTicket':
+    def create_new_session_ticket(cls, key: bytes, timestamp: int) -> 'NewSessionTicket':
         instance = cls()
         instance.count = 2
         instance.reserved = 4
-        tickets = [SessionTicket.create_session_ticket(1, key), SessionTicket.create_session_ticket(2, key)]
+        tickets = [SessionTicket.create_session_ticket(1, key, timestamp),
+                   SessionTicket.create_session_ticket(2, key, timestamp)]
         instance.tickets = tickets
         return instance

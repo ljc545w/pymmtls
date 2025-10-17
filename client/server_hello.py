@@ -23,13 +23,19 @@ class ServerHello:
         pack_len = int.from_bytes(data[:4], "big")
         if len(data) != (pack_len + 4):
             raise RuntimeError("data corrupted")
+        instance = cls()
         data = data[4:]
-        # skip flag, 0x02
+        # flag, 0x02, 如果flag是0x0表示会话过期，此时需要更新会话
+        flag = data[0]
         data = data[1:]
         protocol_version = int.from_bytes(data[:2], "little")
         data = data[2:]
         cipher_suite = int.from_bytes(data[:2], "big")
         data = data[2:]
+        if flag == 0x0:
+            instance.protocol_version = protocol_version
+            instance.cipher_suite = cipher_suite
+            return instance
         # server random
         server_random = data[:32]
         data = data[32:]
@@ -79,7 +85,6 @@ class ServerHello:
             data = data[ext_len:]
         else:
             raise RuntimeError(f"unsupport cipher suite {cipher_suite}")
-        instance = cls()
         instance.protocol_version = protocol_version
         instance.cipher_suite = cipher_suite
         instance.server_random = server_random
