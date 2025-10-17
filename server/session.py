@@ -6,14 +6,15 @@ Created on Fri Jun 21 16:41:08 2024
 """
 import os
 from .session_ticket import NewSessionTicket
+from typing import Union
 
 
 class TrafficKeyPair:
     def __init__(self):
-        self.client_key: bytes or None = None
-        self.server_key: bytes or None = None
-        self.client_nonce: bytes or None = None
-        self.server_nonce: bytes or None = None
+        self.client_key: Union[bytes, None] = None
+        self.server_key: Union[bytes, None] = None
+        self.client_nonce: Union[bytes, None] = None
+        self.server_nonce: Union[bytes, None] = None
 
 
 class Session:
@@ -24,7 +25,7 @@ class Session:
         self.tk = tk
         self.psk_access = psk_access
         self.psk_refresh = psk_refresh
-        self.app_key: 'TrafficKeyPair' or None = None
+        self.app_key: Union['TrafficKeyPair', None] = None
         
     def save(self, path: str) -> bool:
         result = self.serialize()
@@ -43,7 +44,7 @@ class Session:
         return bytes(result)
     
     @classmethod
-    def load_session(cls, path: str) -> 'Session' or None:
+    def load_session(cls, path: str) -> Union['Session', None]:
         if not os.path.exists(path):
             return None
         try:

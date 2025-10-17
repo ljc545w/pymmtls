@@ -17,7 +17,7 @@ import ecdsa.ellipticcurve
 import ecdsa.util
 import threading
 from ecdsa.ellipticcurve import PointJacobi
-from typing import Dict
+from typing import Dict, Union
 from .hand_shake_hasher import HandShakeHasher
 from .session import Session, TrafficKeyPair
 from .client_hello import ClientHello
@@ -34,7 +34,7 @@ from .utility import hkdf_expand, get_logger, singleton
 @singleton
 class MMTLSServer:
     def __init__(self):
-        self.server: 'socket.socket' or None = None
+        self.server: Union['socket.socket', None] = None
         self.clients: Dict[int, MMTLSConnection] = {}
 
     def run_forever(self, host, port):
@@ -63,12 +63,12 @@ class MMTLSConnection:
         self.address: tuple = address
         self.client_id = client_id
         self.status: int = 0
-        self.public_ecdh: 'ecdsa.keys.SigningKey' or None = None
+        self.public_ecdh: Union['ecdsa.keys.SigningKey', None] = None
         self.verify_ecdh: 'ecdsa.keys.SigningKey' = ServerEcdh
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
         self.time_out: int = 35
-        self.session: 'Session' or None = None
+        self.session: Union['Session', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
@@ -282,7 +282,7 @@ class MMTLSConnection:
         readable, _, _ = select.select([self.conn], [], [], self.time_out)
         return self.conn in readable
 
-    def read_data_record(self) -> 'DataRecord' or None:
+    def read_data_record(self) -> Union['DataRecord', None]:
         record = MMTLSRecord()
         rc = self.read_record(record)
         if rc < 0:

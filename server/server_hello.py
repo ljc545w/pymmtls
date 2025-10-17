@@ -10,7 +10,7 @@ from .const import (
     TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
     TLS_PSK_WITH_AES_128_GCM_SHA256
 )
-from typing import Dict, List
+from typing import Dict, List, Union
 from .utility import get_random_key
 
 
@@ -18,9 +18,9 @@ class ServerHello:
     def __init__(self):
         self.protocol_version: int = 0
         self.cipher: int = 0
-        self.public_key: bytes or None = None
-        self.random: bytes or None = None
-        self.extensions: Dict[int, List[bytes]] or None = None
+        self.public_key: Union[bytes, None] = None
+        self.random: Union[bytes, None] = None
+        self.extensions: Union[Dict[int, List[bytes]], None] = None
         
     @classmethod
     def read_server_hello(cls, data: bytes) -> 'ServerHello':

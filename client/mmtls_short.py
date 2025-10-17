@@ -13,16 +13,16 @@ from .session import Session, TrafficKeyPair
 from .record import MMTLSRecord
 from .client_hello import ClientHello
 from .utility import hkdf_expand, get_random_key, get_logger, get_host_by_name
-
+from typing import Union
 
 class MMTLSClientShort:
     def __init__(self):
         self.status: int = 0
-        self.packet_reader: bytes or None = None
-        self.hand_shake_hasher: 'HandShakeHasher' or None = None
+        self.packet_reader: Union[bytes, None] = None
+        self.hand_shake_hasher: Union['HandShakeHasher', None] = None
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
-        self.session: 'Session' or None = None
+        self.session: Union['Session', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 

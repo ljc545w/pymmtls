@@ -4,12 +4,13 @@ Created on Fri Jun 21 16:41:25 2024
 
 @author: Jack Li
 """
+from typing import Union
 
 
 class Signature:
     def __init__(self):
         self.type: int = 0
-        self.ecdsa_signature: bytes or None = None
+        self.ecdsa_signature: Union[bytes, None] = None
     
     @classmethod
     def read_signature(cls, data: bytes) -> 'Signature':

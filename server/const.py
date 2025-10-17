@@ -21,7 +21,7 @@ TCP_Request = 0x00
 TCP_Response = 0x3B9ACA00
 ServerEcdhCurveId = 415
 
-# 测试用秘钥!!!!如用于生存请务必替换该值!!!!!
+# 测试用秘钥!!!!如用于生产环境请务必替换该值!!!!!
 # 可使用如下代码生成
 """
 >>> import ecdsa

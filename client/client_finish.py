@@ -4,12 +4,13 @@ Created on Fri Jun 21 16:38:19 2024
 
 @author: Jack Li
 """
+from typing import Union
 
 
 class ClientFinish:
     def __init__(self):
         self.reserved: int = 0
-        self.data: bytes or None = None
+        self.data: Union[bytes, None] = None
     
     @classmethod
     def new_client_finish(cls, data: bytes) -> 'ClientFinish':

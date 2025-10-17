@@ -23,19 +23,24 @@ from .record import MMTLSRecord
 from .signature import Signature
 from .const import Curve, ServerVerifyEcdh, TCP_NoopRequest, TCP_NoopResponse
 from .utility import get_host_by_name, hkdf_expand, get_logger
+from .const import (
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    TLS_PSK_WITH_AES_128_GCM_SHA256
+)
+from typing import Union
 
 
 class MMTLSClient:
     def __init__(self, server_verify_ecdh=ServerVerifyEcdh):
-        self.conn: 'socket.socket' or None = None
+        self.conn: Union['socket.socket', None] = None
         self.status: int = 0
-        self.public_ecdh: 'ecdsa.keys.SigningKey' or None = None
-        self.verify_ecdh: 'ecdsa.keys.SigningKey' or None = None
+        self.public_ecdh: Union['ecdsa.keys.SigningKey', None] = None
+        self.verify_ecdh: Union['ecdsa.keys.SigningKey', None] = None
         self.server_verify_ecdh: 'ecdsa.keys.VerifyingKey' = server_verify_ecdh
-        self.hand_shake_hasher: 'HandShakeHasher' or None = None
+        self.hand_shake_hasher: Union['HandShakeHasher', None] = None
         self.server_seq_num: int = 0
         self.client_seq_num: int = 0
-        self.session: 'Session' or None = None
+        self.session: Union['Session', None] = None
         self.hand_shake_hasher = HandShakeHasher(hashlib.sha256)
         self.logger = get_logger()
 
@@ -68,11 +73,17 @@ class MMTLSClient:
             rc = self.send_client_hello(client_hello)
             assert rc >= 0
             server_hello = self.read_server_hello()
-            server_public_key = ecdsa.VerifyingKey.from_string(server_hello.public_key, Curve)
-            public_ecdh_private_key = self.public_ecdh.privkey.secret_multiplier
-            com_key = self.compute_ephemeral_secret(
-                server_public_key.pubkey.point, 
-                public_ecdh_private_key)
+            com_key = None
+            if server_hello.cipher_suite == TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 & 0xffff:
+                server_public_key = ecdsa.VerifyingKey.from_string(server_hello.extensions[0x11][0], Curve)
+                public_ecdh_private_key = self.public_ecdh.privkey.secret_multiplier
+                com_key = self.compute_ephemeral_secret(server_public_key.pubkey.point, 
+                                                        public_ecdh_private_key)
+            elif server_hello.cipher_suite == TLS_PSK_WITH_AES_128_GCM_SHA256:
+                pass
+            else:
+                raise RuntimeError("unsupport cipher suite")
+            assert com_key is not None
             rc = self.compute_traffic_key(
                 com_key, 
                 self.hkdf_expand("handshake key expansion", self.hand_shake_hasher), 

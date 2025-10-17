@@ -17,6 +17,7 @@ from .session import TrafficKeyPair
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.backends import default_backend
 from cryptography.exceptions import InvalidTag
+from typing import Union
 
 
 class DataRecord:
@@ -57,7 +58,7 @@ class MMTLSRecord:
         self.record_type: int = 0
         self.version: int = 0
         self.length: int = 0
-        self.data: bytes or None = None
+        self.data: Union[bytes, None] = None
         
     @classmethod
     def create_abort_record(cls, data: bytes) -> 'MMTLSRecord':

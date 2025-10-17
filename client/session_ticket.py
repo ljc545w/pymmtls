@@ -4,17 +4,17 @@ Created on Fri Jun 21 16:41:16 2024
 
 @author: Jack Li
 """
-from typing import List
+from typing import List, Union
 
 
 class SessionTicket:
     def __init__(self):
         self.ticket_type: int = 0
         self.ticket_life_time: int = 0
-        self.ticket_age_add: bytes or None = None
+        self.ticket_age_add: Union[bytes, None] = None
         self.reserved: int = 0
-        self.nonce: bytes or None = None
-        self.ticket: bytes or None = None
+        self.nonce: Union[bytes, None] = None
+        self.ticket: Union[bytes, None] = None
 
     def serialize(self) -> 'bytes':
         result = bytearray()

@@ -13,16 +13,16 @@ from .const import (
 from . import utility
 import time
 from .session_ticket import SessionTicket
-from typing import List, Dict
+from typing import List, Dict, Union
 
 
 class ClientHello:
     def __init__(self):
         self.protocol_version: int = 0
         self.cipher_suites: List[int] = []
-        self.random: bytes or None = None
+        self.random: Union[bytes, None] = None
         self.timestamp: int = 0
-        self.extensions: Dict[int, List[bytes]] or None = None
+        self.extensions: Union[Dict[int, List[bytes]], None] = None
 
     @classmethod
     def new_ecdh_hello(cls,
