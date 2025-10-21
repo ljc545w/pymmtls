@@ -12,17 +12,17 @@ class HandShakeHasher:
     # noinspection PyProtectedMember
     def __init__(self, _hash: 'hashlib._hashlib.Hash'):
         self._hash = _hash
-        self._content = bytearray()
+        self._hasher = self._hash()
+        self._clen = 0
 
     def write(self, content: bytes) -> int:
-        self._content.extend(content)
-        return len(content)
+        self._hasher.update(content)
+        self._clen += len(content)
+        return self._clen
 
     def reset(self):
-        self._content.clear()
+        self._hasher = self._hash()
 
     def sum(self, extra_content: bytes = b'') -> bytes:
         self.write(extra_content)
-        hasher = self._hash()
-        hasher.update(bytes(self._content))
-        return hasher.digest()
+        return self._hasher.digest()
